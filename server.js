@@ -11,7 +11,7 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 app.use(express.json());
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://yourdomain.com', 'https://www.yourdomain.com'] // Replace with your Vercel domain
+  origin: ['http://localhost:3000', 'https://mindsproutapp.com', 'https://www.mindsproutapp.com'] // Replace with your Vercel domain
 }));
 
 // Rate limiting
@@ -23,6 +23,9 @@ app.use(limiter);
 
 // Initialize OpenAI with environment variable
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+app.use(cors());
+app.use(express.json())
 
 // MongoDB connection
 console.log('Attempting to connect to MongoDB...');
