@@ -10,9 +10,22 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(express.json());
+
+// Updated CORS configuration
 app.use(cors({
-  origin: ['http://localhost:3000', 'https://mindsproutapp.com', 'https://www.mindsproutapp.com'] // Replace with your Vercel domain
+  origin: [
+    'http://localhost:3000',
+    'https://mindsproutapp.com',
+    'https://www.mindsproutapp.com',
+    'https://mindsprout-frontend-c2qvqb1og-jays-projects-da2f8026.vercel.app' // Added Vercel frontend URL
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
+
+// Handle CORS preflight requests
+app.options('*', cors());
 
 // Rate limiting
 const limiter = rateLimit({
@@ -23,9 +36,6 @@ app.use(limiter);
 
 // Initialize OpenAI with environment variable
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-app.use(cors());
-app.use(express.json())
 
 // MongoDB connection
 console.log('Attempting to connect to MongoDB...');
