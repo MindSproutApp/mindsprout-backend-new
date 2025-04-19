@@ -11,6 +11,35 @@ const rateLimit = require('express-rate-limit');
 const app = express();
 app.use(express.json());
 
+// Log invalid routes
+const originalGet = app.get;
+app.get = function (path, ...args) {
+  try {
+    return originalGet.call(this, path, ...args);
+  } catch (err) {
+    console.error(`Invalid GET route: ${path}`, err);
+    throw err;
+  }
+};
+const originalPost = app.post;
+app.post = function (path, ...args) {
+  try {
+    return originalPost.call(this, path, ...args);
+  } catch (err) {
+    console.error(`Invalid POST route: ${path}`, err);
+    throw err;
+  }
+};
+const originalPut = app.put;
+app.put = function (path, ...args) {
+  try {
+    return originalPut.call(this, path, ...args);
+  } catch (err) {
+    console.error(`Invalid PUT route: ${path}`, err);
+    throw err;
+  }
+};
+
 // Updated CORS configuration
 app.use(cors({
   origin: [
