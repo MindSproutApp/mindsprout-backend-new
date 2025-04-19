@@ -56,12 +56,12 @@ app.use(cors({
 // Handle CORS preflight requests
 app.options('*', cors());
 
-// Rate limiting
+// Rate limiting for API routes only
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100 // 100 requests
 });
-app.use(limiter);
+app.use('/api/regular', limiter);
 
 // Initialize OpenAI with environment variable
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
