@@ -46,7 +46,7 @@ app.use(cors({
     'http://localhost:3000',
     'https://mindsproutapp.com',
     'https://www.mindsproutapp.com',
-    'https://mindsprout-frontend-c2qvqb1og-jays-projects-da2f8026.vercel.app'
+    'https://mindsprout-frontend-c2qvqb1og-jays-projects-da2f8026.vercel.app' // Added Vercel frontend URL
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -200,27 +200,6 @@ app.get('/api/regular/reports', authenticateToken, async (req, res) => {
   }
 });
 
-app.delete('/api/regular/reports/:id', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      console.log('User not found:', req.user.id);
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const reportIndex = user.reports.findIndex(report => report._id.toString() === req.params.id);
-    if (reportIndex === -1) {
-      console.log('Report not found:', req.params.id);
-      return res.status(404).json({ error: 'Report not found' });
-    }
-    user.reports.splice(reportIndex, 1); // Remove the report
-    await user.save();
-    res.json({ message: 'Report deleted successfully' });
-  } catch (err) {
-    console.error('Error deleting report:', err);
-    res.status(500).json({ error: 'Failed to delete report: ' + err.message });
-  }
-});
-
 app.get('/api/regular/last-chat', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -279,31 +258,10 @@ app.post('/api/regular/insights', authenticateToken, async (req, res) => {
     };
     user.journal.push(journalEntry);
     await user.save();
-    res.json({ message: 'Journal entry saved', _id: journalEntry._id }); // Return _id for client
+    res.json({ message: 'Journal entry saved' });
   } catch (err) {
     console.error('Error saving journal:', err.message);
     res.status(500).json({ error: 'Failed to save journal: ' + err.message });
-  }
-});
-
-app.delete('/api/regular/journal/:id', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      console.log('User not found:', req.user.id);
-      return res.status(404).json({ error: 'User not found' });
-    }
-    const journalEntryIndex = user.journal.findIndex(entry => entry._id.toString() === req.params.id);
-    if (journalEntryIndex === -1) {
-      console.log('Journal entry not found:', req.params.id);
-      return res.status(404).json({ error: 'Journal entry not found' });
-    }
-    user.journal.splice(journalEntryIndex, 1); // Remove the journal entry
-    await user.save();
-    res.json({ message: 'Journal entry deleted successfully' });
-  } catch (err) {
-    console.error('Error deleting journal entry:', err);
-    res.status(500).json({ error: 'Failed to delete journal entry: ' + err.message });
   }
 });
 
