@@ -200,6 +200,27 @@ app.get('/api/regular/reports', authenticateToken, async (req, res) => {
   }
 });
 
+app.delete('/api/regular/reports/:id', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const reportIndex = user.reports.findIndex(report => report._id.toString() === req.params.id);
+    if (reportIndex === -1) {
+      console.log('Report not found:', req.params.id);
+      return res.status(404).json({ error: 'Report not found' });
+    }
+    user.reports.splice(reportIndex, 1); // Remove the report
+    await user.save();
+    res.json({ message: 'Report deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting report:', err);
+    res.status(500).json({ error: 'Failed to delete report: ' + err.message });
+  }
+});
+
 app.get('/api/regular/last-chat', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
