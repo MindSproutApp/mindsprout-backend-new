@@ -106,12 +106,13 @@ const UserSchema = new mongoose.Schema({
     insight: String,
     createdAt: { type: Date, default: Date.now }
   }],
-  dailyAffirmations: {
+  dailyAffirmations: [{
     suggest: String,
     encourage: String,
     invite: String,
+    createdAt: { type: Date, default: Date.now },
     validUntil: Date
-  }
+  }]
 });
 
 const User = mongoose.model('User', UserSchema);
@@ -136,7 +137,7 @@ app.post('/api/regular/signup', async (req, res) => {
   const { name, email, username, password } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ name, email, username, password: hashedPassword });
+    const user = new User({ name, email, username, password: hashedPassword, dailyAffirmations: [] });
     await user.save();
     const token = jwt.sign({ id: user._id, role: 'regular' }, process.env.JWT_SECRET);
     res.json({ message: 'Signup successful', token });
@@ -481,7 +482,16 @@ app.get('/api/regular/daily-affirmations', authenticateToken, async (req, res) =
       console.log('User not found:', req.user.id);
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json(user.dailyAffirmations || null);
+    // Clean up expired affirmations
+    user.dailyAffirmations = user.dailyAffirmations.filter(
+      affirmation => new Date(affirmation.validUntil) > new Date()
+    );
+    await user.save();
+    // Return the most recent valid affirmations, if any
+    const latestAffirmations = user.dailyAffirmations.length > 0
+      ? user.dailyAffirmations[user.dailyAffirmations.length - 1]
+      : null;
+    res.json(latestAffirmations);
   } catch (error) {
     console.error('Error fetching daily affirmations:', error);
     res.status(500).json({ error: 'Failed to fetch daily affirmations: ' + error.message });
@@ -495,28 +505,29 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
       console.log('User not found:', req.user.id);
       return res.status(404).json({ error: 'User not found' });
     }
-
-    // Check if affirmations are still valid
-    if (user.dailyAffirmations && new Date(user.dailyAffirmations.validUntil) > new Date()) {
-      return res.status(429).json({ error: 'Daily affirmations already generated. Try again tomorrow.' });
+    // Clean up expired affirmations
+    user.dailyAffirmations = user.dailyAffirmations.filter(
+      affirmation => new Date(affirmation.validUntil) > new Date()
+    );
+    // Check if valid affirmations exist
+    if (user.dailyAffirmations.length > 0) {
+      return res.status(429).json({ error: 'Daily affirmations already generated. Try again after they expire.' });
     }
-
     // Generate new affirmations
     const prompts = [
       {
         type: 'suggest',
-        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into todays routine in one sentance, no more than 50 words. start the sentace with "I suggest that you"'
+        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into their daily routine.'
       },
       {
         type: 'encourage',
-        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion in one sentance, no more than 50 words. start the sentace with "I encourage you"'
+        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion.'
       },
       {
         type: 'invite',
-        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being in one sentance, no more than 50 words, start the sentace with "I invite you".'
+        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being.'
       }
     ];
-
     const affirmations = {};
     for (const { type, prompt } of prompts) {
       const response = await openai.chat.completions.create({
@@ -527,19 +538,20 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
       });
       affirmations[type] = response.choices[0].message.content.trim();
     }
-
     // Set validUntil to 24 hours from now
-    const validUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    user.dailyAffirmations = {
+    const now = new Date();
+    const validUntil = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const newAffirmations = {
       suggest: affirmations.suggest,
       encourage: affirmations.encourage,
       invite: affirmations.invite,
+      createdAt: now,
       validUntil
     };
-
+    // Append to the array
+    user.dailyAffirmations.push(newAffirmations);
     await user.save();
-    res.json(user.dailyAffirmations);
+    res.json(newAffirmations);
   } catch (error) {
     console.error('Error generating daily affirmations:', error);
     res.status(500).json({ error: 'Failed to generate daily affirmations: ' + error.message });
