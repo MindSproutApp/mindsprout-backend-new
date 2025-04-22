@@ -481,6 +481,11 @@ app.get('/api/regular/daily-affirmations', authenticateToken, async (req, res) =
       console.log('User not found:', req.user.id);
       return res.status(404).json({ error: 'User not found' });
     }
+    // Return null if affirmations are expired
+    if (user.dailyAffirmations && new Date(user.dailyAffirmations.validUntil) < new Date()) {
+      user.dailyAffirmations = null;
+      await user.save();
+    }
     res.json(user.dailyAffirmations || null);
   } catch (error) {
     console.error('Error fetching daily affirmations:', error);
@@ -505,15 +510,15 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
     const prompts = [
       {
         type: 'suggest',
-        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into their daily routine.'
+        prompt: 'Provide one sentence (max 50 words) suggesting a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into their daily routine.'
       },
       {
         type: 'encourage',
-        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion.'
+        prompt: 'Provide one sentence (max 50 words) with an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion.'
       },
       {
         type: 'invite',
-        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being.'
+        prompt: 'Provide one sentence (max 50 words) suggesting a reflective practice or activity that promotes mindfulness and enhances overall well-being.'
       }
     ];
 
@@ -522,10 +527,21 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
       const response = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 100,
+        max_tokens: 60,
         temperature: 0.7
       });
-      affirmations[type] = response.choices[0].message.content.trim();
+      let affirmation = response.choices[0].message.content.trim();
+      // Truncate to one sentence, max 50 words
+      const words = affirmation.split(' ');
+      if (words.length > 50) {
+        affirmation = words.slice(0, 50).join(' ') + '.';
+      } else {
+        const firstPeriod = affirmation.indexOf('.');
+        if (firstPeriod !== -1) {
+          affirmation = affirmation.substring(0, firstPeriod + 1);
+        }
+      }
+      affirmations[type] = affirmation;
     }
 
     // Set validUntil to 24 hours from now
