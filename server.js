@@ -105,7 +105,13 @@ const UserSchema = new mongoose.Schema({
     journalDate: Date,
     insight: String,
     createdAt: { type: Date, default: Date.now }
-  }]
+  }],
+  dailyAffirmations: {
+    suggest: String,
+    encourage: String,
+    invite: String,
+    validUntil: Date
+  }
 });
 
 const User = mongoose.model('User', UserSchema);
@@ -465,6 +471,78 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('End chat error:', error.message);
     res.status(500).json({ error: 'Error ending chat: ' + error.message });
+  }
+});
+
+app.get('/api/regular/daily-affirmations', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user.dailyAffirmations || null);
+  } catch (error) {
+    console.error('Error fetching daily affirmations:', error);
+    res.status(500).json({ error: 'Failed to fetch daily affirmations: ' + error.message });
+  }
+});
+
+app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if affirmations are still valid
+    if (user.dailyAffirmations && new Date(user.dailyAffirmations.validUntil) > new Date()) {
+      return res.status(429).json({ error: 'Daily affirmations already generated. Try again tomorrow.' });
+    }
+
+    // Generate new affirmations
+    const prompts = [
+      {
+        type: 'suggest',
+        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into their daily routine.'
+      },
+      {
+        type: 'encourage',
+        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion.'
+      },
+      {
+        type: 'invite',
+        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being.'
+      }
+    ];
+
+    const affirmations = {};
+    for (const { type, prompt } of prompts) {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.7
+      });
+      affirmations[type] = response.choices[0].message.content.trim();
+    }
+
+    // Set validUntil to 24 hours from now
+    const validUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    user.dailyAffirmations = {
+      suggest: affirmations.suggest,
+      encourage: affirmations.encourage,
+      invite: affirmations.invite,
+      validUntil
+    };
+
+    await user.save();
+    res.json(user.dailyAffirmations);
+  } catch (error) {
+    console.error('Error generating daily affirmations:', error);
+    res.status(500).json({ error: 'Failed to generate daily affirmations: ' + error.message });
   }
 });
 
