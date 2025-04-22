@@ -505,15 +505,15 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
     const prompts = [
       {
         type: 'suggest',
-        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into todays routine in one sentance, no more than 50 words.'
+        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into todays routine in one sentance, no more than 50 words. start the sentace with "I suggest that you"'
       },
       {
         type: 'encourage',
-        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion in one sentance, no more than 50 words.'
+        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion in one sentance, no more than 50 words. start the sentace with "I encourage you"'
       },
       {
         type: 'invite',
-        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being in one sentance, no more than 50 words.'
+        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being in one sentance, no more than 50 words, start the sentace with "I invite you".'
       }
     ];
 
