@@ -7,6 +7,7 @@ const OpenAI = require('openai');
 const cors = require('cors');
 const sanitizeHtml = require('sanitize-html');
 const rateLimit = require('express-rate-limit');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 app.use(express.json());
@@ -53,7 +54,6 @@ app.use(cors({
   credentials: true
 }));
 
-// Handle CORS preflight requests
 app.options('*', cors());
 
 // Rate limiting for API routes only
@@ -63,7 +63,7 @@ const limiter = rateLimit({
 });
 app.use('/api/regular', limiter);
 
-// Initialize OpenAI with environment variable
+// Initialize OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // MongoDB connection
@@ -75,7 +75,7 @@ mongoose.connect(process.env.MONGODB_URI, {
   .then(() => console.log('Connected to MongoDB successfully!'))
   .catch(err => console.error('MongoDB connection failed:', err.message));
 
-// Define the schema
+// Updated User Schema with subscription fields
 const UserSchema = new mongoose.Schema({
   name: String,
   email: String,
@@ -111,11 +111,18 @@ const UserSchema = new mongoose.Schema({
     encourage: String,
     invite: String,
     validUntil: Date
+  },
+  subscription: {
+    stripeCustomerId: String,
+    subscriptionId: String,
+    status: { type: String, enum: ['active', 'inactive', 'canceled'], default: 'inactive' },
+    lastChecked: Date
   }
 });
 
 const User = mongoose.model('User', UserSchema);
 
+// Middleware to authenticate JWT
 const authenticateToken = (req, res, next) => {
   const token = req.headers['authorization'];
   if (!token) {
@@ -132,6 +139,126 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Middleware to check subscription status
+const requireSubscription = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check subscription status
+    if (!user.subscription || user.subscription.status !== 'active') {
+      return res.status(403).json({ error: 'Active subscription required' });
+    }
+
+    // Verify with Stripe periodically (every 24 hours)
+    if (!user.subscription.lastChecked || (new Date() - new Date(user.subscription.lastChecked)) > 24 * 60 * 60 * 1000) {
+      const subscription = await stripe.subscriptions.retrieve(user.subscription.subscriptionId);
+      user.subscription.status = subscription.status === 'active' ? 'active' : 'inactive';
+      user.subscription.lastChecked = new Date();
+      await user.save();
+    }
+
+    if (user.subscription.status !== 'active') {
+      return res.status(403).json({ error: 'Active subscription required' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Subscription check error:', error);
+    res.status(500).json({ error: 'Failed to verify subscription' });
+  }
+};
+
+// Create Stripe checkout session
+app.post('/api/regular/create-checkout-session', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Create or retrieve Stripe customer
+    let stripeCustomerId = user.subscription?.stripeCustomerId;
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId: user._id.toString() }
+      });
+      stripeCustomerId = customer.id;
+      user.subscription = { stripeCustomerId, status: 'inactive' };
+      await user.save();
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: stripeCustomerId,
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      line_items: [{
+        price: process.env.STRIPE_PRICE_ID,
+        quantity: 1
+      }],
+      success_url: 'https://mindsprout-frontend-c2qvqb1og-jays-projects-da2f8026.vercel.app/success?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: 'https://mindsprout-frontend-c2qvqb1og-jays-projects-da2f8026.vercel.app/cancel',
+      metadata: { userId: user._id.toString() }
+    });
+
+    res.json({ sessionId: session.id });
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+// Handle subscription success
+app.post('/api/regular/subscription-success', authenticateToken, async (req, res) => {
+  const { sessionId } = req.body;
+  try {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (session.payment_status === 'paid') {
+      const subscription = await stripe.subscriptions.retrieve(session.subscription);
+      user.subscription = {
+        stripeCustomerId: session.customer,
+        subscriptionId: session.subscription,
+        status: subscription.status === 'active' ? 'active' : 'inactive',
+        lastChecked: new Date()
+      };
+      await user.save();
+      res.json({ message: 'Subscription activated', subscription: user.subscription });
+    } else {
+      res.status(400).json({ error: 'Payment not completed' });
+    }
+  } catch (error) {
+    console.error('Error processing subscription:', error);
+    res.status(500).json({ error: 'Failed to process subscription' });
+  }
+});
+
+// Get subscription status
+app.get('/api/regular/subscription-status', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ subscription: user.subscription || { status: 'inactive' } });
+  } catch (error) {
+    console.error('Error fetching subscription status:', error);
+    res.status(500).json({ error: 'Failed to fetch subscription status' });
+  }
+});
+
+// Signup
 app.post('/api/regular/signup', async (req, res) => {
   const { name, email, username, password } = req.body;
   try {
@@ -146,6 +273,7 @@ app.post('/api/regular/signup', async (req, res) => {
   }
 });
 
+// Login
 app.post('/api/regular/login', async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -161,6 +289,7 @@ app.post('/api/regular/login', async (req, res) => {
   }
 });
 
+// Goals
 app.get('/api/regular/goals', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -196,6 +325,7 @@ app.put('/api/regular/goals', authenticateToken, async (req, res) => {
   }
 });
 
+// Reports
 app.get('/api/regular/reports', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -218,7 +348,7 @@ app.delete('/api/regular/reports/:id', authenticateToken, async (req, res) => {
       console.log('Report not found:', req.params.id);
       return res.status(404).json({ error: 'Report not found' });
     }
-    user.reports.splice(reportIndex, 1); // Remove the report
+    user.reports.splice(reportIndex, 1);
     await user.save();
     res.json({ message: 'Report deleted successfully' });
   } catch (err) {
@@ -227,6 +357,7 @@ app.delete('/api/regular/reports/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Last Chat
 app.get('/api/regular/last-chat', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -245,6 +376,7 @@ app.get('/api/regular/last-chat', authenticateToken, async (req, res) => {
   }
 });
 
+// Journal
 app.get('/api/regular/journal', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -285,7 +417,7 @@ app.post('/api/regular/insights', authenticateToken, async (req, res) => {
     };
     user.journal.push(journalEntry);
     await user.save();
-    res.json({ message: 'Journal entry saved', _id: journalEntry._id }); // Return _id for client
+    res.json({ message: 'Journal entry saved', _id: journalEntry._id });
   } catch (err) {
     console.error('Error saving journal:', err.message);
     res.status(500).json({ error: 'Failed to save journal: ' + err.message });
@@ -304,7 +436,7 @@ app.delete('/api/regular/journal/:id', authenticateToken, async (req, res) => {
       console.log('Journal entry not found:', req.params.id);
       return res.status(404).json({ error: 'Journal entry not found' });
     }
-    user.journal.splice(journalEntryIndex, 1); // Remove the journal entry
+    user.journal.splice(journalEntryIndex, 1);
     await user.save();
     res.json({ message: 'Journal entry deleted successfully' });
   } catch (err) {
@@ -313,6 +445,7 @@ app.delete('/api/regular/journal/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Journal Insights
 app.post('/api/regular/journal-insights', authenticateToken, async (req, res) => {
   const { journalDate, responses } = req.body;
   if (!journalDate || !responses) {
@@ -320,6 +453,12 @@ app.post('/api/regular/journal-insights', authenticateToken, async (req, res) =>
     return res.status(400).json({ error: 'Missing required fields' });
   }
   try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     const sanitizedResponses = Object.fromEntries(
       Object.entries(responses).map(([key, value]) => [key, sanitizeHtml(value, { allowedTags: [], allowedAttributes: {} })])
     );
@@ -334,11 +473,17 @@ app.post('/api/regular/journal-insights', authenticateToken, async (req, res) =>
       temperature: 0.7
     });
     const insight = response.choices[0].message.content.trim();
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      console.log('User not found:', req.user.id);
-      return res.status(404).json({ error: 'User not found' });
+
+    // Check subscription status
+    let isSubscribed = user.subscription && user.subscription.status === 'active';
+    if (isSubscribed && (!user.subscription.lastChecked || (new Date() - new Date(user.subscription.lastChecked)) > 24 * 60 * 60 * 1000)) {
+      const subscription = await stripe.subscriptions.retrieve(user.subscription.subscriptionId);
+      user.subscription.status = subscription.status === 'active' ? 'active' : 'inactive';
+      user.subscription.lastChecked = new Date();
+      await user.save();
+      isSubscribed = user.subscription.status === 'active';
     }
+
     if (!user.journalInsights) {
       user.journalInsights = [];
     }
@@ -348,7 +493,14 @@ app.post('/api/regular/journal-insights', authenticateToken, async (req, res) =>
       createdAt: new Date()
     });
     await user.save();
-    res.json({ insight });
+
+    // Return full insight for subscribers, partial for non-subscribers
+    if (isSubscribed) {
+      res.json({ insight });
+    } else {
+      const firstSentence = insight.split('. ')[0] + '.';
+      res.json({ insight: firstSentence, isPartial: true });
+    }
   } catch (err) {
     console.error('Error generating journal insight:', err.message);
     res.status(500).json({ error: 'Failed to generate insight: ' + err.message });
@@ -362,13 +514,36 @@ app.get('/api/regular/journal-insights', authenticateToken, async (req, res) => 
       console.log('User not found:', req.user.id);
       return res.status(404).json({ error: 'User not found' });
     }
-    res.json(user.journalInsights || []);
+
+    // Check subscription status
+    let isSubscribed = user.subscription && user.subscription.status === 'active';
+    if (isSubscribed && (!user.subscription.lastChecked || (new Date() - new Date(user.subscription.lastChecked)) > 24 * 60 * 60 * 1000)) {
+      const subscription = await stripe.subscriptions.retrieve(user.subscription.subscriptionId);
+      user.subscription.status = subscription.status === 'active' ? 'active' : 'inactive';
+      user.subscription.lastChecked = new Date();
+      await user.save();
+      isSubscribed = user.subscription.status === 'active';
+    }
+
+    const insights = user.journalInsights || [];
+    if (isSubscribed) {
+      res.json(insights);
+    } else {
+      // Return partial insights (first sentence only)
+      const partialInsights = insights.map(insight => ({
+        ...insight,
+        insight: insight.insight.split('. ')[0] + '.',
+        isPartial: true
+      }));
+      res.json(partialInsights);
+    }
   } catch (err) {
     console.error('Error fetching journal insights:', err);
     res.status(500).json({ error: 'Failed to fetch journal insights: ' + err.message });
   }
 });
 
+// Chat
 app.post('/api/regular/chat', authenticateToken, async (req, res) => {
   const { message, chatHistory } = req.body;
   const sanitizedMessage = sanitizeHtml(message, { allowedTags: [], allowedAttributes: {} });
@@ -397,6 +572,7 @@ app.post('/api/regular/chat', authenticateToken, async (req, res) => {
   }
 });
 
+// End Chat
 app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
   const { chatHistory, quiz } = req.body;
   console.log('End-chat request received:', { userId: req.user.id, chatHistoryLength: chatHistory?.length, quiz });
@@ -456,6 +632,16 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Check subscription status
+    let isSubscribed = user.subscription && user.subscription.status === 'active';
+    if (isSubscribed && (!user.subscription.lastChecked || (new Date() - new Date(user.subscription.lastChecked)) > 24 * 60 * 60 * 1000)) {
+      const subscription = await stripe.subscriptions.retrieve(user.subscription.subscriptionId);
+      user.subscription.status = subscription.status === 'active' ? 'active' : 'inactive';
+      user.subscription.lastChecked = new Date();
+      await user.save();
+      isSubscribed = user.subscription.status === 'active';
+    }
+
     const report = {
       date: new Date(),
       summary: sections,
@@ -467,13 +653,23 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
     await user.save();
     console.log('Report saved to MongoDB:', report);
 
-    res.json(report);
+    // Return full report for subscribers, partial for non-subscribers
+    if (isSubscribed) {
+      res.json(report);
+    } else {
+      const partialSummary = {};
+      requiredSections.forEach(section => {
+        partialSummary[section] = sections[section].split('. ')[0] + '.';
+      });
+      res.json({ ...report, summary: partialSummary, isPartial: true });
+    }
   } catch (error) {
     console.error('End chat error:', error.message);
     res.status(500).json({ error: 'Error ending chat: ' + error.message });
   }
 });
 
+// Daily Affirmations
 app.get('/api/regular/daily-affirmations', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -496,12 +692,10 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Check if affirmations are still valid
     if (user.dailyAffirmations && new Date(user.dailyAffirmations.validUntil) > new Date()) {
       return res.status(429).json({ error: 'Daily affirmations already generated. Try again tomorrow.' });
     }
 
-    // Generate new affirmations
     const prompts = [
       {
         type: 'suggest',
@@ -528,9 +722,7 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
       affirmations[type] = response.choices[0].message.content.trim();
     }
 
-    // Set validUntil to 24 hours from now
     const validUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
     user.dailyAffirmations = {
       suggest: affirmations.suggest,
       encourage: affirmations.encourage,
