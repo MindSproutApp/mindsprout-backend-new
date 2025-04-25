@@ -378,7 +378,7 @@ app.post('/api/regular/journal-insights', authenticateToken, async (req, res) =>
       Object.entries(responses).map(([key, value]) => [key, sanitizeHtml(value, { allowedTags: [], allowedAttributes: {} })])
     );
     const prompt = `
-      Generate a profound summary (200-300 words) based on the following journal entry, written in a reflective and empathetic tone. Address the user directly (e.g., "You shared", "Your reflections"). Focus on uncovering deeper insights from their responses, highlighting themes, emotions, or patterns. Do not use emojis or include the raw data in the summary.
+      Generate a profound summary (300-400 words) based on the following journal entry, written in a reflective and empathetic tone. Address the user directly (e.g., "You shared", "Your reflections"). Focus on uncovering deeper insights from their responses, highlighting themes, emotions, or patterns. Do not use emojis or include the raw data in the summary.
       Journal Responses: ${JSON.stringify(sanitizedResponses)}
     `;
     const response = await openai.chat.completions.create({
@@ -464,7 +464,7 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
   const preQuiz = { ...quiz, isPostChat: false };
 
   const prompt = `
-    Write a detailed summary of this chat session in a professional tone (up to 1000 words total, no emojis), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each 200-250 words, and use ** as headers exactly as shown below:
+    Write a detailed summary of this chat session in a professional tone (up to 1000 words total, no emojis), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each 250-300 words, and use ** as headers exactly as shown below:
     - **What We Discussed**: Summarize key topics you brought up in the conversation.
     - **Your Thoughts & Feelings**: Describe the main emotions and thoughts you felt, with examples.
     - **Insights Uncovered**: Detail any reflections or insights you gained during our chat.
