@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -544,6 +543,20 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
   } catch (error) {
     console.error('Error generating daily affirmations:', error);
     res.status(500).json({ error: 'Failed to generate daily affirmations: ' + error.message });
+  }
+});
+
+app.delete('/api/regular/account', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ message: 'Account deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting account:', err);
+    res.status(500).json({ error: 'Failed to delete account: ' + err.message });
   }
 });
 
