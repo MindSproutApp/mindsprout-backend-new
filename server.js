@@ -409,7 +409,7 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
   const preQuiz = { ...quiz, isPostChat: false };
 
   const prompt = `
-    Write a detailed summary of this chat session in a professional tone (up to 1500 words total, no emojis), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each 250-300 words exactly, and use ** as headers exactly as shown below:
+    Write a detailed summary of this chat session in a professional tone (up to 1500 words total, no emojis), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each 250-300 words, and use ** as headers exactly as shown below:
     - **What We Discussed**: Summarize key topics you brought up in the conversation.
     - **Your Thoughts & Feelings**: Describe the main emotions and thoughts you felt, with examples.
     - **Insights Uncovered**: Detail any reflections or insights you gained during our chat.
@@ -503,7 +503,15 @@ app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) 
     const prompts = [
       {
         type: 'suggest',
-        prompt: 'Write a short daily insight (50–100 words) that offers a gentle, reflective suggestion or observation. The tone should be warm, grounded, and intuitive — like a subtle nudge rather than a directive. Avoid any mention of astrology, signs, moon phases, or anything mystical. Instead, let the energy of the day come through in mood, tone, and focus. Each insight should feel quietly aligned with a natural rhythm — something the reader can feel, not analyze."'
+        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into todays routine in one sentance, no more than 50 words."I suggest that you"'
+      },
+      {
+        type: 'encourage',
+        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion in one sentance, no more than 50 words. start the sentance with "I encourage you"'
+      },
+      {
+        type: 'invite',
+        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being in one sentance, no more than 50 words. start the sentance with "I invite you"'
       }
     ];
 
