@@ -94,7 +94,7 @@ const UserSchema = new mongoose.Schema({
   }],
   goals: [{ text: String, achieved: Boolean, date: Date }],
   lastChatTimestamp: Date,
-  chatTokens: { type: Number, default: 3 },
+  tranquilTokens: { type: Number, default: 1 }, // Replaced chatTokens
   lastTokenRegen: { type: Date, default: Date.now },
   journal: [{
     date: { type: Date, required: true },
@@ -232,13 +232,12 @@ app.get('/api/regular/last-chat', authenticateToken, async (req, res) => {
     const user = await User.findById(req.user.id);
     const now = new Date();
     const hoursSinceLastRegen = (now - new Date(user.lastTokenRegen)) / (1000 * 60 * 60);
-    if (hoursSinceLastRegen >= 3) {
-      const tokensToAdd = Math.floor(hoursSinceLastRegen / 3);
-      user.chatTokens = Math.min(user.chatTokens + tokensToAdd, 3);
-      user.lastTokenRegen = new Date(now.getTime() - ((hoursSinceLastRegen % 3) * 1000 * 60 * 60));
+    if (hoursSinceLastRegen >= 24 && user.tranquilTokens < 1) {
+      user.tranquilTokens = 1; // Regenerate one token
+      user.lastTokenRegen = new Date();
       await user.save();
     }
-    res.json({ lastChatTimestamp: user.lastChatTimestamp, chatTokens: user.chatTokens });
+    res.json({ lastChatTimestamp: user.lastChatTimestamp, tranquilTokens: user.tranquilTokens });
   } catch (error) {
     console.error('Error fetching last chat:', error);
     res.status(500).json({ error: 'Failed to fetch last chat' });
@@ -463,7 +462,6 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
     };
     user.reports.push(report);
     user.lastChatTimestamp = new Date();
-    user.chatTokens = Math.max(user.chatTokens - 1, 0);
     await user.save();
     console.log('Report saved to MongoDB:', report);
 
@@ -557,6 +555,54 @@ app.delete('/api/regular/account', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error deleting account:', err);
     res.status(500).json({ error: 'Failed to delete account: ' + err.message });
+  }
+});
+
+// Tranquil Tokens Endpoints
+app.get('/api/regular/tranquil-tokens', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    const now = new Date();
+    const hoursSinceLastRegen = (now - new Date(user.lastTokenRegen)) / (1000 * 60 * 60);
+    if (hoursSinceLastRegen >= 24 && user.tranquilTokens < 1) {
+      user.tranquilTokens = 1; // Regenerate one token
+      user.lastTokenRegen = new Date();
+      await user.save();
+    }
+    res.json({ tranquilTokens: user.tranquilTokens, lastTokenRegen: user.lastTokenRegen });
+  } catch (error) {
+    console.error('Error fetching tokens:', error);
+    res.status(500).json({ error: 'Failed to fetch tokens' });
+  }
+});
+
+app.post('/api/regular/consume-token', authenticateToken, async (req, res) => {
+  const { action } = req.body;
+  try {
+    const user = await User.findById(req.user.id);
+    if (user.tranquilTokens < 1) {
+      return res.status(400).json({ error: 'Insufficient tokens' });
+    }
+    user.tranquilTokens -= 1;
+    await user.save();
+    res.json({ message: 'Token consumed', tranquilTokens: user.tranquilTokens });
+  } catch (error) {
+    console.error('Error consuming token:', error);
+    res.status(500).json({ error: 'Failed to consume token' });
+  }
+});
+
+app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
+  const { quantity, price } = req.body;
+  try {
+    const user = await User.findById(req.user.id);
+    // Placeholder: Integrate payment processor (e.g., Stripe) here
+    user.tranquilTokens += quantity;
+    await user.save();
+    res.json({ message: 'Tokens purchased', tranquilTokens: user.tranquilTokens });
+  } catch (error) {
+    console.error('Error purchasing tokens:', error);
+    res.status(500).json({ error: 'Failed to purchase tokens' });
   }
 });
 
