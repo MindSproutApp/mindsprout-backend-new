@@ -592,19 +592,88 @@ app.post('/api/regular/consume-token', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
-  const { quantity, price } = req.body;
+// === START OF STRIPE ADDITIONS ===
+// Initialize Stripe
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+// Create Stripe Checkout Session
+app.post('/api/regular/create-checkout-session', authenticateToken, async (req, res) => {
+  const { quantity, productId } = req.body;
   try {
-    const user = await User.findById(req.user.id);
-    // Placeholder: Integrate payment processor (e.g., Stripe) here
-    user.tranquilTokens += quantity;
-    await user.save();
-    res.json({ message: 'Tokens purchased', tranquilTokens: user.tranquilTokens });
+    // Define token prices (matching frontend)
+    const prices = {
+      'tranquil_tokens_1': { amount: 99, quantity: 1 }, // £0.99
+      'tranquil_tokens_5': { amount: 399, quantity: 5 }, // £3.99
+      'tranquil_tokens_10': { amount: 699, quantity: 10 }, // £6.99
+      'tranquil_tokens_50': { amount: 1999, quantity: 50 }, // £19.99
+      'tranquil_tokens_100': { amount: 2999, quantity: 100 }, // £29.99
+    };
+
+    if (!prices[productId]) {
+      console.log('Invalid product ID:', productId);
+      return res.status(400).json({ error: 'Invalid product ID' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'gbp',
+            product_data: {
+              name: `${prices[productId].quantity} Tranquil Tokens`,
+            },
+            unit_amount: prices[productId].amount, // Amount in pence
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${process.env.STRIPE_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: process.env.STRIPE_CANCEL_URL,
+      metadata: {
+        userId: req.user.id,
+        productId,
+        quantity: prices[productId].quantity.toString(),
+      },
+    });
+
+    res.json({ sessionId: session.id });
   } catch (error) {
-    console.error('Error purchasing tokens:', error);
-    res.status(500).json({ error: 'Failed to purchase tokens' });
+    console.error('Error creating checkout session:', error.message);
+    res.status(500).json({ error: 'Failed to create checkout session: ' + error.message });
   }
 });
+
+// Update purchase-tokens endpoint to verify Stripe payment
+app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
+  const { sessionId } = req.body;
+  try {
+    // Verify the Stripe session
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== 'paid') {
+      console.log('Payment not completed for session:', sessionId);
+      return res.status(400).json({ error: 'Payment not completed' });
+    }
+
+    // Ensure the user matches
+    if (session.metadata.userId !== req.user.id) {
+      console.log('User ID mismatch:', { sessionUser: session.metadata.userId, reqUser: req.user.id });
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const quantity = parseInt(session.metadata.quantity, 10);
+    const user = await User.findById(req.user.id);
+    user.tranquilTokens += quantity;
+    await user.save();
+
+    res.json({ message: 'Tokens purchased', tranquilTokens: user.tranquilTokens });
+  } catch (error) {
+    console.error('Error processing token purchase:', error.message);
+    res.status(500).json({ error: 'Failed to purchase tokens: ' + error.message });
+  }
+});
+// === END OF STRIPE ADDITIONS ===
 
 // Use dynamic port for Render
 const PORT = process.env.PORT || 5000;
