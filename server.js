@@ -603,7 +603,7 @@ app.post('/api/regular/create-checkout-session', authenticateToken, async (req, 
     // Define token prices (matching frontend)
     const prices = {
       'tranquil_tokens_1': { amount: 99, quantity: 1 }, // £0.99
-      'tranquil_tokens_5': { amount: 399, quantity: 5 }, // £3.99
+      'tranquil_tokens_5': { amount: 199, quantity: 5 }, // £1.99
       'tranquil_tokens_10': { amount: 699, quantity: 10 }, // £6.99
       'tranquil_tokens_50': { amount: 1999, quantity: 50 }, // £19.99
       'tranquil_tokens_100': { amount: 2999, quantity: 100 }, // £29.99
