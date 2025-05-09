@@ -144,8 +144,15 @@ const letGoWords = [
 
 // Helper function to select 3 random words
 const getRandomWords = (wordList) => {
-  const shuffled = wordList.sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, 3);
+  if (!wordList || wordList.length === 0) {
+    console.error('Word list is empty or undefined:', wordList);
+    return ['N/A', 'N/A', 'N/A']; // Fallback
+  }
+  console.log('Word list length:', wordList.length);
+  const shuffled = [...wordList].sort(() => 0.5 - Math.random());
+  const selected = shuffled.slice(0, Math.min(3, shuffled.length));
+  console.log('Selected words:', selected);
+  return selected;
 };
 
 const authenticateToken = (req, res, next) => {
@@ -563,18 +570,32 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
 
     // Check if words need regeneration
     const now = new Date();
-    if (!user.starlitGuidance || new Date(user.starlitGuidance.validUntil) < now) {
+    console.log('Checking starlitGuidance for user:', req.user.id, 'Current starlitGuidance:', user.starlitGuidance);
+    if (!user.starlitGuidance || new Date(user.starlitGuidance.validUntil) < now || 
+        !user.starlitGuidance.embrace?.length || !user.starlitGuidance.letGo?.length) {
+      console.log('Generating new starlitGuidance for user:', req.user.id);
+      const newEmbrace = getRandomWords(embraceWords);
+      const newLetGo = getRandomWords(letGoWords);
       user.starlitGuidance = {
-        embrace: getRandomWords(embraceWords),
-        letGo: getRandomWords(letGoWords),
+        embrace: newEmbrace,
+        letGo: newLetGo,
         validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
       };
-      await user.save();
+      console.log('New starlitGuidance:', user.starlitGuidance);
+      try {
+        await user.save();
+        console.log('Saved starlitGuidance for user:', req.user.id, user.starlitGuidance);
+      } catch (saveError) {
+        console.error('Error saving starlitGuidance:', saveError.message);
+        return res.status(500).json({ error: 'Failed to save Starlit Guidance: ' + saveError.message });
+      }
+    } else {
+      console.log('Using existing starlitGuidance for user:', req.user.id, user.starlitGuidance);
     }
 
     res.json(user.starlitGuidance);
   } catch (error) {
-    console.error('Error fetching Starlit Guidance:', error);
+    console.error('Error fetching Starlit Guidance:', error.message);
     res.status(500).json({ error: 'Failed to fetch Starlit Guidance: ' + error.message });
   }
 });
