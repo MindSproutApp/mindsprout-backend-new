@@ -9,6 +9,34 @@ const sanitizeHtml = require('sanitize-html');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+
+// Apply CORS middleware first
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'https://mindsproutapp.com',
+    'https://www.mindsproutapp.com',
+    'https://mindsprout-frontend-c2qvqb1og-jays-projects-da2f8026.vercel.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+}));
+
+// Handle CORS preflight requests explicitly
+app.options('*', (req, res) => {
+  console.log('Handling OPTIONS request for:', req.originalUrl);
+  res.status(204).end();
+});
+
+// Log all requests for debugging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 app.use(express.json());
 
 // Log invalid routes
@@ -39,22 +67,6 @@ app.put = function (path, ...args) {
     throw err;
   }
 };
-
-// Updated CORS configuration
-app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://mindsproutapp.com',
-    'https://www.mindsproutapp.com',
-    'https://mindsprout-frontend-c2qvqb1og-jays-projects-da2f8026.vercel.app'
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
-
-// Handle CORS preflight requests
-app.options('*', cors());
 
 // Rate limiting for API routes only
 const limiter = rateLimit({
