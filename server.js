@@ -94,7 +94,7 @@ const UserSchema = new mongoose.Schema({
   }],
   goals: [{ text: String, achieved: Boolean, date: Date }],
   lastChatTimestamp: Date,
-  tranquilTokens: { type: Number, default: 1 }, // Replaced chatTokens
+  tranquilTokens: { type: Number, default: 1 },
   lastTokenRegen: { type: Date, default: Date.now },
   journal: [{
     date: { type: Date, required: true },
@@ -106,15 +106,47 @@ const UserSchema = new mongoose.Schema({
     insight: String,
     createdAt: { type: Date, default: Date.now }
   }],
-  dailyAffirmations: {
-    suggest: String,
-    encourage: String,
-    invite: String,
-    validUntil: Date
+  starlitGuidance: {
+    embrace: [String], // Array of 3 words for "What Should I Embrace"
+    letGo: [String], // Array of 3 words for "What Should I Let Go Of"
+    validUntil: Date // When to regenerate
   }
 });
 
 const User = mongoose.model('User', UserSchema);
+
+// Word lists for Starlit Guidance
+const embraceWords = [
+  'Bright Spark', 'Open Heart', 'Bold Step', 'Quiet Strength', 'Wild Dream',
+  'Gentle Touch', 'Fierce Hope', 'True Path', 'Soft Glow', 'Brave Leap',
+  'Deep Trust', 'Free Spirit', 'Warm Light', 'Strong Roots', 'New Horizon',
+  'Pure Joy', 'Calm Flow', 'High Flight', 'Kind Voice', 'Vast Sky',
+  'Steady Pulse', 'Raw Courage', 'Clear Vision', 'Sweet Bloom', 'Firm Ground',
+  'Bright Flame', 'Open Door', 'True North', 'Warm Breeze', 'Deep Breath',
+  'Wild Heart', 'Soft Dawn', 'Bold Truth', 'Free Dance', 'Quiet Grace',
+  'Strong Tide', 'New Dawn', 'Pure Light', 'Fierce Love', 'Calm Sea',
+  'High Star', 'Kind Spark', 'Vast Dream', 'Steady Flame', 'Raw Hope',
+  'Clear Sky', 'Sweet Song', 'Firm Hope', 'Bright Path', 'Open Soul'
+];
+
+const letGoWords = [
+  'Heavy Chain', 'Dark Cloud', 'Old Fear', 'Cold Grip', 'Faded Echo',
+  'Broken Tie', 'Dull Ache', 'Lost Path', 'Tight Knot', 'False Mask',
+  'Bitter Sting', 'Worn Thread', 'Hard Shell', 'Dim Shadow', 'Old Wound',
+  'Cold Wall', 'Frayed Rope', 'Heavy Load', 'False Hope', 'Dark Veil',
+  'Rigid Frame', 'Old Scar', 'Tight Grasp', 'Dull Spark', 'Lost Dream',
+  'Cold Fear', 'Broken Link', 'Faded Light', 'Hard Edge', 'Old Doubt',
+  'Dim Glow', 'Heavy Fog', 'False Step', 'Worn Mask', 'Bitter Root',
+  'Cold Stone', 'Frayed Bond', 'Dark Weight', 'Old Chain', 'Tight Cage',
+  'Dull Flame', 'Lost Voice', 'Hard Truth', 'Faded Star', 'Cold Touch',
+  'Broken Road', 'Dim Hope', 'Heavy Mask', 'Old Storm', 'False Dawn'
+];
+
+// Helper function to select 3 random words
+const getRandomWords = (wordList) => {
+  const shuffled = wordList.sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, 3);
+};
 
 const authenticateToken = (req, res, next) => {
   const token = req.headers['authorization'];
@@ -284,7 +316,7 @@ app.post('/api/regular/insights', authenticateToken, async (req, res) => {
     };
     user.journal.push(journalEntry);
     await user.save();
-    res.json({ message: 'Journal entry saved', _id: journalEntry._id }); // Return _id for client
+    res.json({ message: 'Journal entry saved', _id: journalEntry._id });
   } catch (err) {
     console.error('Error saving journal:', err.message);
     res.status(500).json({ error: 'Failed to save journal: ' + err.message });
@@ -472,78 +504,6 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/regular/daily-affirmations', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      console.log('User not found:', req.user.id);
-      return res.status(404).json({ error: 'User not found' });
-    }
-    res.json(user.dailyAffirmations || null);
-  } catch (error) {
-    console.error('Error fetching daily affirmations:', error);
-    res.status(500).json({ error: 'Failed to fetch daily affirmations: ' + error.message });
-  }
-});
-
-app.post('/api/regular/daily-affirmations', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      console.log('User not found:', req.user.id);
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Check if affirmations are still valid
-    if (user.dailyAffirmations && new Date(user.dailyAffirmations.validUntil) > new Date()) {
-      return res.status(429).json({ error: 'Daily affirmations already generated. Try again tomorrow.' });
-    }
-
-    // Generate new affirmations
-    const prompts = [
-      {
-        type: 'suggest',
-        prompt: 'Please provide a specific, actionable mindfulness practice or self-care activity that users can easily incorporate into todays routine in one sentance, no more than 50 words."I suggest that you"'
-      },
-      {
-        type: 'encourage',
-        prompt: 'Generate an encouraging phrase or action that motivates users to embrace positivity and practice self-compassion in one sentance, no more than 50 words. start the sentance with "I encourage you"'
-      },
-      {
-        type: 'invite',
-        prompt: 'Suggest a reflective practice or activity that users can engage in to promote mindfulness and enhance their overall well-being in one sentance, no more than 50 words. start the sentance with "I invite you"'
-      }
-    ];
-
-    const affirmations = {};
-    for (const { type, prompt } of prompts) {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 100,
-        temperature: 0.7
-      });
-      affirmations[type] = response.choices[0].message.content.trim();
-    }
-
-    // Set validUntil to 24 hours from now
-    const validUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-    user.dailyAffirmations = {
-      suggest: affirmations.suggest,
-      encourage: affirmations.encourage,
-      invite: affirmations.invite,
-      validUntil
-    };
-
-    await user.save();
-    res.json(user.dailyAffirmations);
-  } catch (error) {
-    console.error('Error generating daily affirmations:', error);
-    res.status(500).json({ error: 'Failed to generate daily affirmations: ' + error.message });
-  }
-});
-
 app.delete('/api/regular/account', authenticateToken, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.user.id);
@@ -589,6 +549,33 @@ app.post('/api/regular/consume-token', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error consuming token:', error);
     res.status(500).json({ error: 'Failed to consume token' });
+  }
+});
+
+// Starlit Guidance Endpoint
+app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if words need regeneration
+    const now = new Date();
+    if (!user.starlitGuidance || new Date(user.starlitGuidance.validUntil) < now) {
+      user.starlitGuidance = {
+        embrace: getRandomWords(embraceWords),
+        letGo: getRandomWords(letGoWords),
+        validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
+      };
+      await user.save();
+    }
+
+    res.json(user.starlitGuidance);
+  } catch (error) {
+    console.error('Error fetching Starlit Guidance:', error);
+    res.status(500).json({ error: 'Failed to fetch Starlit Guidance: ' + error.message });
   }
 });
 
