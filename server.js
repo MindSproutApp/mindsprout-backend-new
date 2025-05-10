@@ -125,6 +125,9 @@ const UserSchema = new mongoose.Schema({
   }
 });
 
+// Add index on email field for faster login queries
+UserSchema.index({ email: 1 }, { unique: true });
+
 const User = mongoose.model('User', UserSchema);
 
 // Word lists for Starlit Guidance
@@ -136,8 +139,7 @@ const embraceWords = [
   'Steady Pulse', 'Raw Courage', 'Clear Vision', 'Sweet Bloom', 'Firm Ground',
   'Bright Flame', 'Open Door', 'True North', 'Warm Breeze', 'Deep Breath',
   'Wild Heart', 'Soft Dawn', 'Bold Truth', 'Free Dance', 'Quiet Grace',
-  'Strong Tide', 'New Dawn', 'Pure Light', 'Fierce Love', 'Calm Sea',
-  'High Star', 'Kind Spark', 'Vast Dream', 'Steady Flame', 'Raw Hope',
+  'Strong Tide', 'New Dawn', 'Pure Light', 'Fierce Love', 'Calm Sea','High Star', 'Kind Spark', 'Vast Dream', 'Steady Flame', 'Raw Hope',
   'Clear Sky', 'Sweet Song', 'Firm Hope', 'Bright Path', 'Open Soul'
 ];
 
@@ -186,7 +188,7 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/regular/signup', async (req, res) => {
   const { name, email, username, password } = req.body;
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 8); // Reduced from 10 to 8 for faster hashing
     const user = new User({ name, email, username, password: hashedPassword });
     await user.save();
     const token = jwt.sign({ id: user._id, role: 'regular' }, process.env.JWT_SECRET);
@@ -477,7 +479,7 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
       model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 1100,
-      temperature: 0.5
+      temperature: 0.5,
     });
     const text = response.choices[0].message.content.trim();
     console.log('Full raw summary response:', text);
@@ -591,7 +593,7 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
       user.starlitGuidance = {
         embrace: newEmbrace,
         letGo: newLetGo,
-        validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
+        validUntil: new Date(now.getTime() + ータ24 * 60 * 60 * 1000) // 24 hours from now
       };
       console.log('New starlitGuidance:', user.starlitGuidance);
       try {
