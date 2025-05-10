@@ -593,7 +593,7 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
       user.starlitGuidance = {
         embrace: newEmbrace,
         letGo: newLetGo,
-        validUntil: new Date(now.getTime() + ータ24 * 60 * 60 * 1000) // 24 hours from now
+        validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
       };
       console.log('New starlitGuidance:', user.starlitGuidance);
       try {
@@ -696,6 +696,61 @@ app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => 
   }
 });
 // === END OF STRIPE ADDITIONS ===
+
+// Combined endpoint to fetch all user data
+app.get('/api/regular/user-data', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Handle token regeneration
+    const now = new Date();
+    const hoursSinceLastRegen = (now - new Date(user.lastTokenRegen)) / (1000 * 60 * 60);
+    if (hoursSinceLastRegen >= 24 && user.tranquilTokens < 1) {
+      user.tranquilTokens = 1;
+      user.lastTokenRegen = new Date();
+    }
+
+    // Handle Starlit Guidance regeneration
+    if (!user.starlitGuidance || new Date(user.starlitGuidance.validUntil) < now || 
+        !user.starlitGuidance.embrace?.length || !user.starlitGuidance.letGo?.length) {
+      console.log('Generating new starlitGuidance for user:', req.user.id);
+      const newEmbrace = getRandomWords(embraceWords);
+      const newLetGo = getRandomWords(letGoWords);
+      user.starlitGuidance = {
+        embrace: newEmbrace,
+        letGo: newLetGo,
+        validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      };
+    }
+
+    await user.save();
+
+    // Convert journal responses from Map to plain object for JSON serialization
+    const journal = user.journal.map(entry => ({
+      ...entry._doc,
+      responses: Object.fromEntries(entry.responses)
+    }));
+
+    // Return all relevant user data
+    res.json({
+      goals: user.goals || [],
+      reports: user.reports || [],
+      lastChatTimestamp: user.lastChatTimestamp,
+      tranquilTokens: user.tranquilTokens,
+      lastTokenRegen: user.lastTokenRegen,
+      journal: journal || [],
+      journalInsights: user.journalInsights || [],
+      starlitGuidance: user.starlitGuidance
+    });
+  } catch (err) {
+    console.error('Error fetching user data:', err.message);
+    res.status(500).json({ error: 'Failed to fetch user data: ' + err.message });
+  }
+});
 
 // Use dynamic port for Render
 const PORT = process.env.PORT || 5000;
