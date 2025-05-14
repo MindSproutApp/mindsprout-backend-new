@@ -132,28 +132,37 @@ const User = mongoose.model('User', UserSchema);
 
 // Word lists for Starlit Guidance
 const embraceWords = [
-  'Bright Spark', 'Open Heart', 'Bold Step', 'Quiet Strength', 'Wild Dream',
-  'Gentle Touch', 'Fierce Hope', 'True Path', 'Soft Glow', 'Brave Leap',
-  'Deep Trust', 'Free Spirit', 'Warm Light', 'Strong Roots', 'New Horizon',
-  'Pure Joy', 'Calm Flow', 'High Flight', 'Kind Voice', 'Vast Sky',
-  'Steady Pulse', 'Raw Courage', 'Clear Vision', 'Sweet Bloom', 'Firm Ground',
-  'Bright Flame', 'Open Door', 'True North', 'Warm Breeze', 'Deep Breath',
-  'Wild Heart', 'Soft Dawn', 'Bold Truth', 'Free Dance', 'Quiet Grace',
-  'Strong Tide', 'New Dawn', 'Pure Light', 'Fierce Love', 'Calm Sea','High Star', 'Kind Spark', 'Vast Dream', 'Steady Flame', 'Raw Hope',
-  'Clear Sky', 'Sweet Song', 'Firm Hope', 'Bright Path', 'Open Soul'
+  'curiosity', 'kindness', 'courage', 'clarity', 'patience', 'listen', 'grow', 'trust', 'create', 'focus',
+  'empathy', 'honesty', 'adapt', 'calm', 'learn', 'smile', 'explore', 'share', 'persist', 'reflect',
+  'strength', 'openness', 'gratitude', 'balance', 'hope', 'connect', 'breathe', 'forgive', 'dream', 'act',
+  'confidence', 'gentleness', 'joy', 'resolve', 'observe', 'build', 'accept', 'care', 'inspire', 'rest',
+  'truth', 'freedom', 'play', 'seek', 'heal', 'nurture', 'laugh', 'move', 'understand', 'choose',
+  'compassion', 'boldness', 'peace', 'effort', 'spark', 'voice', 'climb', 'embrace', 'renew', 'reach',
+  'wisdom', 'energy', 'grace', 'drive', 'touch', 'shine', 'stand', 'write', 'dance', 'vision',
+  'warmth', 'zest', 'ground', 'flow', 'lift', 'plant', 'run', 'see', 'sing', 'anchor',
+  'sparkle', 'stride', 'mend', 'bloom', 'stretch', 'soar', 'taste', 'think', 'comfort', 'light',
+  'push', 'join', 'live', 'love', 'rise', 'teach', 'walk', 'welcome', 'cherish', 'uplift',
+  'believe', 'thrive', 'radiate', 'encourage', 'unite', 'celebrate', 'evolve', 'imagine', 'support', 'spark',
+  'awaken', 'harmonize', 'illuminate', 'venture', 'appreciate', 'empower', 'deepen', 'align', 'motivate', 'cultivate',
+  'transform', 'renewal', 'inspire', 'blossom', 'navigate', 'center', 'expand', 'release', 'discover', 'enrich',
+  'persevere', 'connect', 'radiance', 'authenticity', 'serenity', 'intention', 'vitality', 'embracing', 'elevate', 'flourish'
 ];
 
 const letGoWords = [
-  'Heavy Chain', 'Dark Cloud', 'Old Fear', 'Cold Grip', 'Faded Echo',
-  'Broken Tie', 'Dull Ache', 'Lost Path', 'Tight Knot', 'False Mask',
-  'Bitter Sting', 'Worn Thread', 'Hard Shell', 'Dim Shadow', 'Old Wound',
-  'Cold Wall', 'Frayed Rope', 'Heavy Load', 'False Hope', 'Dark Veil',
-  'Rigid Frame', 'Old Scar', 'Tight Grasp', 'Dull Spark', 'Lost Dream',
-  'Cold Fear', 'Broken Link', 'Faded Light', 'Hard Edge', 'Old Doubt',
-  'Dim Glow', 'Heavy Fog', 'False Step', 'Worn Mask', 'Bitter Root',
-  'Cold Stone', 'Frayed Bond', 'Dark Weight', 'Old Chain', 'Tight Cage',
-  'Dull Flame', 'Lost Voice', 'Hard Truth', 'Faded Star', 'Cold Touch',
-  'Broken Road', 'Dim Hope', 'Heavy Mask', 'Old Storm', 'False Dawn'
+  'doubt', 'fear', 'anger', 'guilt', 'shame', 'regret', 'stress', 'envy', 'clutter', 'rush',
+  'blame', 'worry', 'grudge', 'pride', 'chaos', 'hide', 'ignore', 'resent', 'delay', 'judge',
+  'tension', 'greed', 'panic', 'control', 'past', 'gossip', 'frown', 'haste', 'mask', 'burden',
+  'jealousy', 'neglect', 'excuse', 'stagnate', 'dwell', 'reject', 'hoard', 'fret', 'scorn', 'wait',
+  'rigidity', 'spite', 'sarcasm', 'trap', 'drift', 'gripe', 'limit', 'mope', 'shirk', 'block',
+  'anxiety', 'bitterness', 'clash', 'weight', 'fake', 'grind', 'mistrust', 'overthink', 'rage', 'stall',
+  'cynicism', 'laziness', 'numb', 'pressure', 'scramble', 'shout', 'strain', 'tangle', 'vague', 'waste',
+  'apathy', 'boredom', 'chain', 'dread', 'fence', 'gloom', 'hinder', 'isolate', 'jolt', 'lure',
+  'mock', 'nag', 'obsess', 'quell', 'repress', 'slump', 'sting', 'tug', 'unrest', 'yell',
+  'avoid', 'complain', 'deny', 'evade', 'fumble', 'grumble', 'hesitate', 'restrict', 'sulk', 'withdraw',
+  'resentment', 'insecurity', 'frustration', 'procrastinate', 'disdain', 'distraction', 'arrogance', 'defeat', 'rigmarole', 'self-pity',
+  'vengeance', 'condemn', 'struggle', 'agitation', 'denial', 'fixate', 'suppress', 'loathing', 'disrupt', 'impatience',
+  'discontent', 'malice', 'scramble', 'entangle', 'overwhelm', 'despair', 'criticize', 'stubbornness', 'negativity', 'distrust',
+  'grievance', 'hostility', 'indifference', 'retreat', 'sabotage', 'inertia', 'dishonesty', 'disconnection', 'conform', 'exhaustion'
 ];
 
 // Helper function to select 3 random words
