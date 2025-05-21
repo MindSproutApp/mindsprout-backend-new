@@ -122,7 +122,8 @@ const UserSchema = new mongoose.Schema({
     embrace: [String], // Array of 3 words for "What Should I Embrace"
     letGo: [String], // Array of 3 words for "What Should I Let Go Of"
     validUntil: Date // When to regenerate
-  }
+  },
+  hasClaimedWelcomeTokens: { type: Boolean, default: false } // New field for welcome tokens
 });
 
 // Add index on email field for faster login queries
@@ -620,6 +621,29 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
   } catch (error) {
     console.error('Error fetching Starlit Guidance:', error.message);
     res.status(500).json({ error: 'Failed to fetch Starlit Guidance: ' + error.message });
+  }
+});
+
+// Claim Welcome Tokens Endpoint
+app.post('/api/regular/claim-welcome-tokens', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (user.hasClaimedWelcomeTokens) {
+      console.log('User already claimed welcome tokens:', req.user.id);
+      return res.status(400).json({ error: 'Welcome tokens already claimed' });
+    }
+    user.tranquilTokens += 5; // Add 5 tokens
+    user.hasClaimedWelcomeTokens = true; // Mark as claimed
+    await user.save();
+    console.log('Welcome tokens claimed for user:', req.user.id, 'New token balance:', user.tranquilTokens);
+    res.json({ message: 'Welcome tokens claimed', tranquilTokens: user.tranquilTokens });
+  } catch (error) {
+    console.error('Error claiming welcome tokens:', error.message);
+    res.status(500).json({ error: 'Failed to claim welcome tokens: ' + error.message });
   }
 });
 
