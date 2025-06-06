@@ -472,12 +472,12 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
   const preQuiz = { ...quiz, isPostChat: false };
 
   const prompt = `
-    Write a detailed summary of this chat session in a professional tone (up to 1500 words total, no emojis), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each 250-300 words, and use ** as headers exactly as shown below:
-    - **What We Discussed**: Summarize key topics you brought up in the conversation.
+    Write a detailed summary of this chat session in a professional tone (up to 2500 words total, no emojis), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each 300-500 words, and use ** as headers exactly as shown below:
+    - **What We Discussed**: Summarize the key topics the user brought up and explain why they were important to them, based on what was said or implied in the conversation.
     - **Your Thoughts & Feelings**: Describe the main emotions and thoughts you felt, with examples.
     - **Insights Uncovered**: Detail any reflections or insights you gained during our chat.
-    - **Mood Reflection**: Reflect on how you felt based on the pre-chat quiz and chat content, noting any shifts.
-    - **Recommendations**: Recommend insightful activities to help with your queries.
+    - **Mood Reflection**: Reflect deeply on the user’s emotional state, drawing from both their pre-chat mood input and in-chat language. Identify 1–2 meaningful emotional shifts or patterns and explore what might have influenced them.
+    - **Recommendations**: Based on the specific challenges, insights, and emotions shared in this conversation, suggest 1–2 tailored next steps or activities that align with the user’s needs. Avoid generic suggestions like journaling or meditating unless explicitly discussed. Instead, pull from the conversation to offer relevant, actionable ideas or reframing.
     Use this data for context but do not include it in the summary:
     Chat History: ${history}
     Pre-Chat Quiz: ${JSON.stringify(preQuiz)}
