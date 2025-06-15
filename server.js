@@ -472,7 +472,7 @@ app.post('/api/regular/end-chat', authenticateToken, async (req, res) => {
   const preQuiz = { ...quiz, isPostChat: false };
 
   const prompt = `
-    Write a detailed summary of this chat session in a professional tone (up to 2500 words total, no emojis), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each section must have a minimum of 300-500 words, and use ** as headers exactly as shown below:
+    Write a detailed summary of this chat session in a professional tone (up to 3000 words total, no emojis, ensuring all sections are completed), addressing the user directly in first person (e.g., "You felt", "You expressed"). Split into five sections, each section must have a minimum of 300-500 words, and use ** as headers exactly as shown below:
     - **What We Discussed**: Summarize the key topics the user brought up and explain why they were important to them, based on what was said or implied in the conversation.
     - **Your Thoughts & Feelings**: Describe the main emotions and thoughts you felt, with examples.
     - **Insights Uncovered**: Detail any reflections or insights you gained during our chat.
