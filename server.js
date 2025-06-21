@@ -198,7 +198,7 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/regular/signup', async (req, res) => {
   const { name, email, username, password } = req.body;
   try {
-    const hashedPassword = await bcrypt.hash(password, 8); // Reduced from 10 to 8 for faster hashing
+    const hashedPassword = await bcrypt.hash(password, 8);
     const user = new User({ name, email, username, password: hashedPassword });
     await user.save();
     const token = jwt.sign({ id: user._id, role: 'regular' }, process.env.JWT_SECRET);
@@ -281,7 +281,7 @@ app.delete('/api/regular/reports/:id', authenticateToken, async (req, res) => {
       console.log('Report not found:', req.params.id);
       return res.status(404).json({ error: 'Report not found' });
     }
-    user.reports.splice(reportIndex, 1); // Remove the report
+    user.reports.splice(reportIndex, 1);
     await user.save();
     res.json({ message: 'Report deleted successfully' });
   } catch (err) {
@@ -296,7 +296,7 @@ app.get('/api/regular/last-chat', authenticateToken, async (req, res) => {
     const now = new Date();
     const hoursSinceLastRegen = (now - new Date(user.lastTokenRegen)) / (1000 * 60 * 60);
     if (hoursSinceLastRegen >= 24 && user.tranquilTokens < 1) {
-      user.tranquilTokens = 1; // Regenerate one token
+      user.tranquilTokens = 1;
       user.lastTokenRegen = new Date();
       await user.save();
     }
@@ -365,8 +365,9 @@ app.delete('/api/regular/journal/:id', authenticateToken, async (req, res) => {
     if (journalEntryIndex === -1) {
       console.log('Journal entry not found:', req.params.id);
       return res.status(404).json({ error: 'Journal entry not found' });
+ inept
     }
-    user.journal.splice(journalEntryIndex, 1); // Remove the journal entry
+    user.journal.splice(journalEntryIndex, 1);
     await user.save();
     res.json({ message: 'Journal entry deleted successfully' });
   } catch (err) {
@@ -404,13 +405,16 @@ app.post('/api/regular/journal-insights', authenticateToken, async (req, res) =>
     if (!user.journalInsights) {
       user.journalInsights = [];
     }
-    user.journalInsights.push({
+    const insightEntry = {
+      _id: new mongoose.Types.ObjectId(), // Generate new ObjectId
       journalDate: new Date(journalDate),
       insight,
       createdAt: new Date()
-    });
+    };
+    user.journalInsights.push(insightEntry);
     await user.save();
-    res.json({ insight });
+    console.log('Journal insight saved:', { _id: insightEntry._id, journalDate, insight: insight.substring(0, 50) + '...' });
+    res.json({ _id: insightEntry._id.toString(), insight });
   } catch (err) {
     console.error('Error generating journal insight:', err.message);
     res.status(500).json({ error: 'Failed to generate insight: ' + err.message });
@@ -556,7 +560,7 @@ app.get('/api/regular/tranquil-tokens', authenticateToken, async (req, res) => {
     const now = new Date();
     const hoursSinceLastRegen = (now - new Date(user.lastTokenRegen)) / (1000 * 60 * 60);
     if (hoursSinceLastRegen >= 24 && user.tranquilTokens < 1) {
-      user.tranquilTokens = 1; // Regenerate one token
+      user.tranquilTokens = 1;
       user.lastTokenRegen = new Date();
       await user.save();
     }
@@ -603,7 +607,7 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
       user.starlitGuidance = {
         embrace: newEmbrace,
         letGo: newLetGo,
-        validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000) // 24 hours from now
+        validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000)
       };
       console.log('New starlitGuidance:', user.starlitGuidance);
       try {
@@ -636,8 +640,8 @@ app.post('/api/regular/claim-welcome-tokens', authenticateToken, async (req, res
       console.log('User already claimed welcome tokens:', req.user.id);
       return res.status(400).json({ error: 'Welcome tokens already claimed' });
     }
-    user.tranquilTokens += 5; // Add 5 tokens
-    user.hasClaimedWelcomeTokens = true; // Mark as claimed
+    user.tranquilTokens += 5;
+    user.hasClaimedWelcomeTokens = true;
     await user.save();
     console.log('Welcome tokens claimed for user:', req.user.id, 'New token balance:', user.tranquilTokens);
     res.json({ message: 'Welcome tokens claimed', tranquilTokens: user.tranquilTokens });
@@ -648,20 +652,17 @@ app.post('/api/regular/claim-welcome-tokens', authenticateToken, async (req, res
 });
 
 // === START OF STRIPE ADDITIONS ===
-// Initialize Stripe
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// Create Stripe Checkout Session
 app.post('/api/regular/create-checkout-session', authenticateToken, async (req, res) => {
   const { quantity, productId } = req.body;
   try {
-    // Define token prices (matching frontend)
     const prices = {
-      'tranquil_tokens_1': { amount: 99, quantity: 1 }, // £0.99
-      'tranquil_tokens_5': { amount: 139, quantity: 5 }, // £1.39
-      'tranquil_tokens_10': { amount: 699, quantity: 10 }, // £6.99
-      'tranquil_tokens_50': { amount: 1999, quantity: 50 }, // £19.99
-      'tranquil_tokens_100': { amount: 2999, quantity: 100 }, // £29.99
+      'tranquil_tokens_1': { amount: 99, quantity: 1 },
+      'tranquil_tokens_5': { amount: 139, quantity: 5 },
+      'tranquil_tokens_10': { amount: 699, quantity: 10 },
+      'tranquil_tokens_50': { amount: 1999, quantity: 50 },
+      'tranquil_tokens_100': { amount: 2999, quantity: 100 },
     };
 
     if (!prices[productId]) {
@@ -678,7 +679,7 @@ app.post('/api/regular/create-checkout-session', authenticateToken, async (req, 
             product_data: {
               name: `${prices[productId].quantity} Tranquil Tokens`,
             },
-            unit_amount: prices[productId].amount, // Amount in pence
+            unit_amount: prices[productId].amount,
           },
           quantity: 1,
         },
@@ -700,18 +701,15 @@ app.post('/api/regular/create-checkout-session', authenticateToken, async (req, 
   }
 });
 
-// Update purchase-tokens endpoint to verify Stripe payment
 app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
   const { sessionId } = req.body;
   try {
-    // Verify the Stripe session
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     if (session.payment_status !== 'paid') {
       console.log('Payment not completed for session:', sessionId);
       return res.status(400).json({ error: 'Payment not completed' });
     }
 
-    // Ensure the user matches
     if (session.metadata.userId !== req.user.id) {
       console.log('User ID mismatch:', { sessionUser: session.metadata.userId, reqUser: req.user.id });
       return res.status(403).json({ error: 'Unauthorized' });
