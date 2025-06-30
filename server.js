@@ -7,10 +7,11 @@ const OpenAI = require('openai');
 const cors = require('cors');
 const sanitizeHtml = require('sanitize-html');
 const rateLimit = require('express-rate-limit');
+const { google } = require('googleapis');
 
 const app = express();
 
-// Apply CORS middleware first
+// Apply CORS middleware
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -25,13 +26,11 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
-// Handle CORS preflight requests explicitly
 app.options('*', (req, res) => {
   console.log('Handling OPTIONS request for:', req.originalUrl);
   res.status(204).end();
 });
 
-// Log all requests for debugging
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
@@ -39,7 +38,6 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-// Log invalid routes
 const originalGet = app.get;
 app.get = function (path, ...args) {
   try {
@@ -68,17 +66,14 @@ app.put = function (path, ...args) {
   }
 };
 
-// Rate limiting for API routes only
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // 100 requests
+  windowMs: 15 * 60 * 1000,
+  max: 100
 });
 app.use('/api/regular', limiter);
 
-// Initialize OpenAI with environment variable
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// MongoDB connection
 console.log('Attempting to connect to MongoDB...');
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
@@ -87,7 +82,6 @@ mongoose.connect(process.env.MONGODB_URI, {
   .then(() => console.log('Connected to MongoDB successfully!'))
   .catch(err => console.error('MongoDB connection failed:', err.message));
 
-// Define the schema
 const UserSchema = new mongoose.Schema({
   name: String,
   email: String,
@@ -119,19 +113,17 @@ const UserSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
   }],
   starlitGuidance: {
-    embrace: [String], // Array of 3 words for "What Should I Embrace"
-    letGo: [String], // Array of 3 words for "What Should I Let Go Of"
-    validUntil: Date // When to regenerate
+    embrace: [String],
+    letGo: [String],
+    validUntil: Date
   },
-  hasClaimedWelcomeTokens: { type: Boolean, default: false } // New field for welcome tokens
+  hasClaimedWelcomeTokens: { type: Boolean, default: false }
 });
 
-// Add index on email field for faster login queries
 UserSchema.index({ email: 1 }, { unique: true });
 
 const User = mongoose.model('User', UserSchema);
 
-// Word lists for Starlit Guidance
 const embraceWords = [
   'curiosity', 'kindness', 'courage', 'clarity', 'patience', 'listen', 'grow', 'trust', 'create', 'focus',
   'empathy', 'honesty', 'adapt', 'calm', 'learn', 'smile', 'explore', 'share', 'persist', 'reflect',
@@ -166,16 +158,13 @@ const letGoWords = [
   'grievance', 'hostility', 'indifference', 'retreat', 'sabotage', 'inertia', 'dishonesty', 'disconnection', 'conform', 'exhaustion'
 ];
 
-// Helper function to select 3 random words
 const getRandomWords = (wordList) => {
   if (!wordList || wordList.length === 0) {
     console.error('Word list is empty or undefined:', wordList);
-    return ['N/A', 'N/A', 'N/A']; // Fallback
+    return ['N/A', 'N/A', 'N/A'];
   }
-  console.log('Word list length:', wordList.length);
   const shuffled = [...wordList].sort(() => 0.5 - Math.random());
   const selected = shuffled.slice(0, Math.min(3, shuffled.length));
-  console.log('Selected words:', selected);
   return selected;
 };
 
@@ -365,7 +354,6 @@ app.delete('/api/regular/journal/:id', authenticateToken, async (req, res) => {
     if (journalEntryIndex === -1) {
       console.log('Journal entry not found:', req.params.id);
       return res.status(404).json({ error: 'Journal entry not found' });
- inept
     }
     user.journal.splice(journalEntryIndex, 1);
     await user.save();
@@ -406,7 +394,7 @@ app.post('/api/regular/journal-insights', authenticateToken, async (req, res) =>
       user.journalInsights = [];
     }
     const insightEntry = {
-      _id: new mongoose.Types.ObjectId(), // Generate new ObjectId
+      _id: new mongoose.Types.ObjectId(),
       journalDate: new Date(journalDate),
       insight,
       createdAt: new Date()
@@ -553,7 +541,6 @@ app.delete('/api/regular/account', authenticateToken, async (req, res) => {
   }
 });
 
-// Tranquil Tokens Endpoints
 app.get('/api/regular/tranquil-tokens', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -587,7 +574,6 @@ app.post('/api/regular/consume-token', authenticateToken, async (req, res) => {
   }
 });
 
-// Starlit Guidance Endpoint
 app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -596,10 +582,8 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Check if words need regeneration
     const now = new Date();
-    console.log('Checking starlitGuidance for user:', req.user.id, 'Current starlitGuidance:', user.starlitGuidance);
-    if (!user.starlitGuidance || new Date(user.starlitGuidance.validUntil) < now || 
+    if (!user.starlitGuidance || new Date(user.starlitGuidance.validUntil) < now ||
         !user.starlitGuidance.embrace?.length || !user.starlitGuidance.letGo?.length) {
       console.log('Generating new starlitGuidance for user:', req.user.id);
       const newEmbrace = getRandomWords(embraceWords);
@@ -609,18 +593,8 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
         letGo: newLetGo,
         validUntil: new Date(now.getTime() + 24 * 60 * 60 * 1000)
       };
-      console.log('New starlitGuidance:', user.starlitGuidance);
-      try {
-        await user.save();
-        console.log('Saved starlitGuidance for user:', req.user.id, user.starlitGuidance);
-      } catch (saveError) {
-        console.error('Error saving starlitGuidance:', saveError.message);
-        return res.status(500).json({ error: 'Failed to save Starlit Guidance: ' + saveError.message });
-      }
-    } else {
-      console.log('Using existing starlitGuidance for user:', req.user.id, user.starlitGuidance);
+      await user.save();
     }
-
     res.json(user.starlitGuidance);
   } catch (error) {
     console.error('Error fetching Starlit Guidance:', error.message);
@@ -628,7 +602,6 @@ app.get('/api/regular/starlit-guidance', authenticateToken, async (req, res) => 
   }
 });
 
-// Claim Welcome Tokens Endpoint
 app.post('/api/regular/claim-welcome-tokens', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -651,18 +624,29 @@ app.post('/api/regular/claim-welcome-tokens', authenticateToken, async (req, res
   }
 });
 
-// === START OF STRIPE ADDITIONS ===
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { GoogleAuth } = require('google-auth-library');
+const auth = new GoogleAuth({
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  },
+  scopes: ['https://www.googleapis.com/auth/androidpublisher']
+});
 
-app.post('/api/regular/create-checkout-session', authenticateToken, async (req, res) => {
-  const { quantity, productId } = req.body;
+const androidPublisher = google.androidpublisher({
+  version: 'v3',
+  auth: auth,
+});
+
+app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
+  const { purchaseToken, productId } = req.body;
   try {
     const prices = {
-      'tranquil_tokens_1': { amount: 99, quantity: 1 },
-      'tranquil_tokens_5': { amount: 139, quantity: 5 },
-      'tranquil_tokens_10': { amount: 699, quantity: 10 },
-      'tranquil_tokens_50': { amount: 1999, quantity: 50 },
-      'tranquil_tokens_100': { amount: 2999, quantity: 100 },
+      '1_token.': { quantity: 1 },
+      '5_token.': { quantity: 5 },
+      '10_token.': { quantity: 10 },
+      '50_token.': { quantity: 50 },
+      '100_token.': { quantity: 100 },
     };
 
     if (!prices[productId]) {
@@ -670,55 +654,36 @@ app.post('/api/regular/create-checkout-session', authenticateToken, async (req, 
       return res.status(400).json({ error: 'Invalid product ID' });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'gbp',
-            product_data: {
-              name: `${prices[productId].quantity} Tranquil Tokens`,
-            },
-            unit_amount: prices[productId].amount,
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      success_url: `${process.env.STRIPE_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: process.env.STRIPE_CANCEL_URL,
-      metadata: {
-        userId: req.user.id,
-        productId,
-        quantity: prices[productId].quantity.toString(),
-      },
+    const purchase = await androidPublisher.purchases.products.get({
+      packageName: process.env.ANDROID_PACKAGE_NAME,
+      productId: productId,
+      token: purchaseToken
     });
 
-    res.json({ sessionId: session.id });
-  } catch (error) {
-    console.error('Error creating checkout session:', error.message);
-    res.status(500).json({ error: 'Failed to create checkout session: ' + error.message });
-  }
-});
-
-app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
-  const { sessionId } = req.body;
-  try {
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status !== 'paid') {
-      console.log('Payment not completed for session:', sessionId);
-      return res.status(400).json({ error: 'Payment not completed' });
+    if (purchase.data.purchaseState !== 0) {
+      console.log('Purchase not completed:', purchaseToken);
+      return res.status(400).json({ error: 'Purchase not completed' });
     }
 
-    if (session.metadata.userId !== req.user.id) {
-      console.log('User ID mismatch:', { sessionUser: session.metadata.userId, reqUser: req.user.id });
-      return res.status(403).json({ error: 'Unauthorized' });
+    if (purchase.data.consumptionState === 1) {
+      console.log('Purchase already consumed:', purchaseToken);
+      return res.status(400).json({ error: 'Purchase already consumed' });
     }
 
-    const quantity = parseInt(session.metadata.quantity, 10);
     const user = await User.findById(req.user.id);
-    user.tranquilTokens += quantity;
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    user.tranquilTokens += prices[productId].quantity;
     await user.save();
+
+    await androidPublisher.purchases.products.acknowledge({
+      packageName: process.env.ANDROID_PACKAGE_NAME,
+      productId: productId,
+      token: purchaseToken
+    });
 
     res.json({ message: 'Tokens purchased', tranquilTokens: user.tranquilTokens });
   } catch (error) {
@@ -726,8 +691,6 @@ app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => 
     res.status(500).json({ error: 'Failed to purchase tokens: ' + error.message });
   }
 });
-// === END OF STRIPE ADDITIONS ===
 
-// Use dynamic port for Render
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
