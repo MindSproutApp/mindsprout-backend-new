@@ -640,6 +640,7 @@ const androidPublisher = google.androidpublisher({
 
 app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
   const { purchaseToken, productId } = req.body;
+  const RSA_PUBLIC_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwvxbJ2vOjTY+cbPY/65agexUnjxRtsqGCvQ5eyTtnMjosn8Sgic6T9sVJrEQQA3SVkM2QT+YY7u0YoQmbbQb6Vup2SmU9GyttFrTGvD/TYpQTjmqwE6PLkG3YCyzkZHffekndfmFLnOsn3fROeKBFmz3MwKjCr6qp/IpXA6CVfADNRIPSPOqPvprPJLxeqVau/BMQ/Yba2o0SfKxFQo9/5lpGv4EkAFi8/uSDFdPcE7Rc6Qvz6CS7Ywuq2H8tEjUVqYpA8iD468OWMbcEnR3ojN1FbSgg2xCUnCu0DQqZ3hgluQXeCh1Qx8d70Nm2BchC1nHS07E48IWCjlmJZosIwIDAQAB';
   try {
     const prices = {
       '1_token.': { quantity: 1 },
