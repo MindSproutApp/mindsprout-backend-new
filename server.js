@@ -11,7 +11,7 @@ const { google } = require('googleapis');
 
 const app = express();
 
-// Apply CORS middleware
+// Apply CORS middleware with proper configuration
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -26,7 +26,8 @@ app.use(cors({
   optionsSuccessStatus: 204
 }));
 
-app.options('*', (req, res) => {
+// Explicitly handle preflight OPTIONS requests
+app.options('*', cors(), (req, res) => {
   console.log('Handling OPTIONS request for:', req.originalUrl);
   res.status(204).end();
 });
@@ -38,6 +39,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Override HTTP methods to log errors
 const originalGet = app.get;
 app.get = function (path, ...args) {
   try {
@@ -62,6 +64,15 @@ app.put = function (path, ...args) {
     return originalPut.call(this, path, ...args);
   } catch (err) {
     console.error(`Invalid PUT route: ${path}`, err);
+    throw err;
+  }
+};
+const originalDelete = app.delete;
+app.delete = function (path, ...args) {
+  try {
+    return originalDelete.call(this, path, ...args);
+  } catch (err) {
+    console.error(`Invalid DELETE route: ${path}`, err);
     throw err;
   }
 };
@@ -169,7 +180,8 @@ const getRandomWords = (wordList) => {
 };
 
 const authenticateToken = (req, res, next) => {
-  const token = req.headers['authorization'];
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
   if (!token) {
     console.log('No token provided');
     return res.status(401).json({ error: 'No token provided' });
@@ -188,12 +200,15 @@ app.post('/api/regular/signup', async (req, res) => {
   const { name, email, username, password } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 8);
-    const user = new User({ name, email, username, password: hashedPassword });
+    const user = new User({ name, email: email.toLowerCase(), username, password: hashedPassword });
     await user.save();
-    const token = jwt.sign({ id: user._id, role: 'regular' }, process.env.JWT_SECRET);
+    const token = jwt.sign({ id: user._id, role: 'regular' }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ message: 'Signup successful', token });
   } catch (error) {
     console.error('Signup error:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
     res.status(500).json({ error: 'Signup failed: ' + error.message });
   }
 });
@@ -201,11 +216,11 @@ app.post('/api/regular/signup', async (req, res) => {
 app.post('/api/regular/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const token = jwt.sign({ id: user._id, role: 'regular' }, process.env.JWT_SECRET);
+    const token = jwt.sign({ id: user._id, role: 'regular' }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, name: user.name });
   } catch (error) {
     console.error('Login error:', error);
@@ -216,6 +231,10 @@ app.post('/api/regular/login', async (req, res) => {
 app.get('/api/regular/goals', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
     res.json(user.goals || []);
   } catch (error) {
     console.error('Error fetching goals:', error);
@@ -226,6 +245,10 @@ app.get('/api/regular/goals', authenticateToken, async (req, res) => {
 app.post('/api/regular/goals', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
     user.goals.push({ ...req.body, date: new Date() });
     await user.save();
     res.json(user.goals);
@@ -238,6 +261,10 @@ app.post('/api/regular/goals', authenticateToken, async (req, res) => {
 app.put('/api/regular/goals', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
     const goal = user.goals.find(g => g.text === req.body.text);
     if (goal) goal.achieved = req.body.achieved;
     await user.save();
@@ -251,6 +278,10 @@ app.put('/api/regular/goals', authenticateToken, async (req, res) => {
 app.get('/api/regular/reports', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
     res.json(user.reports || []);
   } catch (error) {
     console.error('Error fetching reports:', error);
@@ -282,6 +313,10 @@ app.delete('/api/regular/reports/:id', authenticateToken, async (req, res) => {
 app.get('/api/regular/last-chat', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
     const now = new Date();
     const hoursSinceLastRegen = (now - new Date(user.lastTokenRegen)) / (1000 * 60 * 60);
     if (hoursSinceLastRegen >= 24 && user.tranquilTokens < 1) {
@@ -325,10 +360,7 @@ app.post('/api/regular/insights', authenticateToken, async (req, res) => {
     if (!user.journal) {
       user.journal = [];
     }
-    const responsesMap = new Map();
-    Object.keys(responses).forEach(key => {
-      responsesMap.set(key, responses[key]);
-    });
+    const responsesMap = new Map(Object.entries(responses));
     const journalEntry = {
       date: new Date(date),
       type: type,
@@ -428,7 +460,7 @@ app.post('/api/regular/chat', authenticateToken, async (req, res) => {
   const sanitizedMessage = sanitizeHtml(message, { allowedTags: [], allowedAttributes: {} });
   const history = chatHistory.map(msg => `${msg.sender === 'user' ? 'You' : 'Pal'}: ${sanitizeHtml(msg.text, { allowedTags: [], allowedAttributes: {} })}`).join('\n');
   const systemPrompt = `
-    I’m Pal, your calm, caring friend here to really listen. Think of this like a deep, thoughtful chat over coffee. I reflect what you share with empathy and curiosity—gently helping you notice patterns, emotions, and what feels meaningful. Support personal reflection and realization over advice. If the user expresses strong emotions like shame, regret, resentment, or deep sadness, you may gently invite them to explore past experiences that could be connected—but never assume or push. Let things flow naturally and focus on what the moment reveals. Stay grounded, warm, and personal—no therapy jargon. Keep replies between 30–50 words. Don’t start responses with “Pal:”. End with a soft, open-ended question that invites deeper thought or emotion.
+    I'm Pal, your calm, caring friend here to really listen. Think of this like a deep, thoughtful chat over coffee. I reflect what you share with empathy and curiosity—gently helping you notice patterns, emotions, and what feels meaningful. Support personal reflection and realization over advice. If the user expresses strong emotions like shame, regret, resentment, or deep sadness, you may gently invite them to explore past experiences that could be connected—but never assume or push. Let things flow naturally and focus on what the moment reveals. Stay grounded, warm, and personal—no therapy jargon. Keep replies between 30–50 words. Don't start responses with "Pal:". End with a soft, open-ended question that invites deeper thought or emotion.
   `;
   try {
     const response = await openai.chat.completions.create({
@@ -544,6 +576,10 @@ app.delete('/api/regular/account', authenticateToken, async (req, res) => {
 app.get('/api/regular/tranquil-tokens', authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
     const now = new Date();
     const hoursSinceLastRegen = (now - new Date(user.lastTokenRegen)) / (1000 * 60 * 60);
     if (hoursSinceLastRegen >= 24 && user.tranquilTokens < 1) {
@@ -562,6 +598,10 @@ app.post('/api/regular/consume-token', authenticateToken, async (req, res) => {
   const { action } = req.body;
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
     if (user.tranquilTokens < 1) {
       return res.status(400).json({ error: 'Insufficient tokens' });
     }
@@ -640,7 +680,6 @@ const androidPublisher = google.androidpublisher({
 
 app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => {
   const { purchaseToken, productId } = req.body;
-  const RSA_PUBLIC_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwvxbJ2vOjTY+cbPY/65agexUnjxRtsqGCvQ5eyTtnMjosn8Sgic6T9sVJrEQQA3SVkM2QT+YY7u0YoQmbbQb6Vup2SmU9GyttFrTGvD/TYpQTjmqwE6PLkG3YCyzkZHffekndfmFLnOsn3fROeKBFmz3MwKjCr6qp/IpXA6CVfADNRIPSPOqPvprPJLxeqVau/BMQ/Yba2o0SfKxFQo9/5lpGv4EkAFi8/uSDFdPcE7Rc6Qvz6CS7Ywuq2H8tEjUVqYpA8iD468OWMbcEnR3ojN1FbSgg2xCUnCu0DQqZ3hgluQXeCh1Qx8d70Nm2BchC1nHS07E48IWCjlmJZosIwIDAQAB';
   try {
     const prices = {
       '1_token.': { quantity: 1 },
@@ -690,6 +729,44 @@ app.post('/api/regular/purchase-tokens', authenticateToken, async (req, res) => 
   } catch (error) {
     console.error('Error processing token purchase:', error.message);
     res.status(500).json({ error: 'Failed to purchase tokens: ' + error.message });
+  }
+});
+
+app.get('/api/regular/daily-affirmations', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      console.log('User not found:', req.user.id);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const now = new Date();
+    const affirmationsPrompt = `
+      Generate three unique daily affirmations for the user, each 10-20 words, in a warm and encouraging tone. Structure them as:
+      - I Suggest: [action-oriented affirmation]
+      - I Encourage: [emotion-focused affirmation]
+      - I Invite: [reflection-oriented affirmation]
+      Use a positive, empathetic voice and avoid emojis.
+    `;
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: affirmationsPrompt }],
+      max_tokens: 100,
+      temperature: 0.7
+    });
+    const text = response.choices[0].message.content.trim();
+    const affirmations = { suggest: '', encourage: '', invite: '' };
+    const lines = text.split('\n');
+    lines.forEach(line => {
+      if (line.startsWith('I Suggest:')) affirmations.suggest = line.replace('I Suggest:', '').trim();
+      else if (line.startsWith('I Encourage:')) affirmations.encourage = line.replace('I Encourage:', '').trim();
+      else if (line.startsWith('I Invite:')) affirmations.invite = line.replace('I Invite:', '').trim();
+    });
+
+    res.json(affirmations);
+  } catch (error) {
+    console.error('Error generating daily affirmations:', error);
+    res.status(500).json({ error: 'Failed to generate daily affirmations' });
   }
 });
 
